@@ -1,1 +1,1 @@
-# level-zero-raytracing-tests-snap
+# OpenCL CTS Snap
