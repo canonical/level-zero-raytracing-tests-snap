@@ -1,5 +1,6 @@
 #!/bin/sh
+
 set -e
 
-rm -f /etc/sudoers.d/checkbox
-rm -f /etc/polkit-1/localauthority/50-local.d/com.canonical.certification.checkbox.pkla
+# Strict confinement: nothing to clean up outside snap data.
+echo "level-zero-tests: remove hook completed."

@@ -1,12 +1,9 @@
 #!/bin/bash
 
-echo "Available mustpass caselist files:"
+set -euo pipefail
+
+BIN_DIR="${SNAP}/usr/bin"
+
+echo "Usage: level-zero-tests.test <test-name> [args...]"
 echo ""
-find "${SNAP}/usr/share/vulkan-cts/mustpass" -name "*.txt" 2>/dev/null | while read -r file; do
-    # Strip the snap prefix and share directory to show relative path
-    echo "  ${file#${SNAP}/usr/share/vulkan-cts/}"
-done
-echo ""
-echo "Usage examples:"
-echo "  vulkan-cts.test --caselist=mustpass/main/vk-default/api.txt"
-echo "  vulkan-cts.test --deqp-case=dEQP-VK.info.build"
+find "${BIN_DIR}" -maxdepth 1 -type f -perm -111 -name "test_*" -printf "%f\n" | sort

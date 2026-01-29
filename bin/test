@@ -1,51 +1,30 @@
 #!/bin/bash
 
-if [ -z "$1" ]; then
-    echo "Usage: vulkan-cts.test <test-spec>"
-    echo ""
-    echo "Examples:"
-    echo "  vulkan-cts.test --deqp-case=dEQP-VK.info.build"
-    echo "  vulkan-cts.test --caselist=mustpass/main/vk-default/api.txt"
-    echo "  vulkan-cts.test dEQP-VK.info.build"
-    exit 1
+set -euo pipefail
+
+BIN_DIR="${SNAP}/usr/bin"
+
+if [ "$#" -lt 1 ]; then
+    echo "Usage: level-zero-tests.test <binary-name> [args...]" >&2
+    exit 2
 fi
 
-# Create a working directory for test results
-WORK_DIR="${HOME}/.vulkan-cts"
-mkdir -p "${WORK_DIR}"
-cd "${WORK_DIR}"
+binname="$1"
+shift
 
-run_deqp() {
-    # Stream output unchanged but override exit based on the final "Failed:" summary count.
-    "$@" 2>&1 | awk '
-        {
-            print
-            if ($1 == "Failed:") {
-                split($2, parts, "/")
-                failed = parts[1]
-                found = 1
-            }
-        }
-        END {
-            if (found && failed + 0 > 0) {
-                exit 1
-            }
-            exit 0
-        }
-    '
-    return $?
-}
+case "${binname}" in
+    test_*) ;;
+    *)
+        echo "Test not found: ${binname}" >&2
+        echo "Run: level-zero-tests.list-tests" >&2
+        exit 2
+        ;;
+esac
 
-# Parse the argument and run deqp-vk accordingly
-if [[ "$1" == --caselist=* ]]; then
-    # Extract the caselist path
-    CASELIST_PATH="${1#--caselist=}"
-    # Run with caselist from the snap's data directory
-    run_deqp "${SNAP}/usr/bin/deqp-vk" --deqp-caselist-file="${SNAP}/usr/share/vulkan-cts/${CASELIST_PATH}"
-elif [[ "$1" == --deqp-case=* ]]; then
-    # Pass through as-is
-    run_deqp "${SNAP}/usr/bin/deqp-vk" "$1"
-else
-    # Assume it's a bare test case name
-    run_deqp "${SNAP}/usr/bin/deqp-vk" --deqp-case="$1"
+if [ ! -x "${BIN_DIR}/${binname}" ]; then
+    echo "Test not found: ${binname}" >&2
+    echo "Run: level-zero-tests.list-tests" >&2
+    exit 2
 fi
+
+exec "${BIN_DIR}/${binname}" "$@"

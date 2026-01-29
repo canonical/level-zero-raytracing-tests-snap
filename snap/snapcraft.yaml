@@ -1,19 +1,18 @@
-name: vulkan-cts
+name: level-zero-tests
 base: core24
-confinement: classic
+confinement: strict
 lint:
   ignore:
     - metadata
 platforms:
   amd64:
     build-on: [amd64]
-  arm64:
-    build-on: [amd64, arm64]
-version: '1.4.5'
-summary: Khronos Vulkan Conformance Test Suite
+version: '1.16.1'
+summary: Intel Level Zero Unit Tests
+
 description: |
-  Baseline snap for the Khronos Vulkan CTS. Builds the deqp-vk
-  test binary from source via CMake and ships an executable for running tests.
+  Snap for building and running Intel's Level Zero unit tests
+  from the Level Zero repository
 
 apps:
   test:
@@ -22,67 +21,91 @@ apps:
     command: list_tests
 
 parts:
-  test-conformance:
+  test-runner:
     source: bin/
     plugin: dump
     stage:
       - test
 
-  list-tests:
+  list-tests-runner:
     source: bin/
     plugin: dump
     stage:
       - list_tests
 
-  vulkan-cts:
+  level-zero-sdk:
     plugin: nil
-    source: https://github.com/KhronosGroup/VK-GL-CTS.git
-    source-branch: vulkan-cts-$SNAPCRAFT_PROJECT_VERSION
+    source: https://github.com/oneapi-src/level-zero.git
     source-type: git
+    source-branch: master
     build-attributes:
       - enable-patchelf
     build-packages:
       - build-essential
       - cmake
-      - python3-pip
-      - meson
+      - git
       - pkg-config
-      - libpng-dev
-      - libvulkan-dev
-      - mesa-common-dev
-      - python3-lxml
-    stage-packages:
-      - libgl1
-      - libvulkan1
-      - libpng16-16t64
-      - libx11-6
-      - libxcb1
-      - libxext6
-      - libwayland-client0
+      - python3
     override-build: |
       set -eux
 
-      python3 external/fetch_sources.py
-      mkdir build && cd build
+      cmake -S . -B build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr
 
-      # Different archs need different buildflags; only set arch flags
-      # when building natively to avoid passing host-incompatible -march.
-      CMAKE_CLANG_FLAGS=""
-      if [ "$CRAFT_ARCH_BUILD_FOR" == "amd64" ] && [ "$CRAFT_ARCH_BUILD_ON" == "amd64" ]; then
-          CMAKE_CLANG_FLAGS=-m64
-      elif [ "$CRAFT_ARCH_BUILD_FOR" == "arm64" ] && [ "$CRAFT_ARCH_BUILD_ON" == "arm64" ]; then
-          CMAKE_CLANG_FLAGS=-march=armv8-a
-      fi
+      cmake --build build -j"$(nproc)"
+      cmake --install build --prefix "${CRAFT_PART_INSTALL}/usr"
 
-      cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=$CMAKE_CLANG_FLAGS -DCMAKE_CXX_FLAGS=$CMAKE_CLANG_FLAGS
-      # 64GB RAM wasn't enough for -j. Add nproc
-      make -j`nproc`
+  level-zero-tests:
+    plugin: nil
+    source: https://github.com/oneapi-src/level-zero-tests.git
+    source-type: git
+    source-branch: master
+    after:
+      - level-zero-sdk
+    build-attributes:
+      - enable-patchelf
+    build-packages:
+      - build-essential
+      - cmake
+      - git
+      - pkg-config
+      - libboost-dev
+      - libboost-log-dev
+      - libboost-program-options-dev
+      - libboost-timer-dev
+      - libdrm-dev
+      - libudev-dev
+      - libssl-dev
+      - libgtest-dev
+      - libpng-dev
+      - python3
+    stage-packages:
+      - cmake
+      - libdrm2
+      - libudev1
+      - libssl3t64
+      - libpng16-16t64
+      - libboost-log1.83.0
+      - libboost-program-options1.83.0
+      - libboost-timer1.83.0
+      - libstdc++6
+    override-build: |
+      set -eux
 
-      mkdir -p "${CRAFT_PART_INSTALL}/usr/bin/"
-      cp "${SNAPCRAFT_PART_BUILD}/build/external/vulkancts/modules/vulkan/deqp-vk" "${CRAFT_PART_INSTALL}/usr/bin/"
+      export CMAKE_PREFIX_PATH="${CRAFT_STAGE}/usr:${CMAKE_PREFIX_PATH:-}"
+      export LD_LIBRARY_PATH="${CRAFT_STAGE}/usr/lib:${CRAFT_STAGE}/usr/lib/${CRAFT_ARCH_TRIPLET_BUILD_FOR}:${LD_LIBRARY_PATH:-}"
 
-      # Copy required data files and mustpass lists
-      mkdir -p "${CRAFT_PART_INSTALL}/usr/share/vulkan-cts/"
-      cp -r "${SNAPCRAFT_PART_BUILD}/external/vulkancts/data" "${CRAFT_PART_INSTALL}/usr/share/vulkan-cts/" || true
-      cp -r "${SNAPCRAFT_PART_BUILD}/build/external/vulkancts/modules/vulkan/vulkan" "${CRAFT_PART_INSTALL}/usr/share/vulkan-cts/" || true
-      cp -r "${SNAPCRAFT_PART_BUILD}/external/vulkancts/mustpass" "${CRAFT_PART_INSTALL}/usr/share/vulkan-cts/" || true
+      cmake -S . -B build \
+        -DCMAKE_BUILD_TYPE=Release
+
+      cmake --build build -j"$(nproc)"
+
+      # Stage the full build tree so ctest metadata and unit-test binaries
+      # are available at runtime.
+      mkdir -p "${CRAFT_PART_INSTALL}/usr/lib/level-zero-tests"
+      cp -a build "${CRAFT_PART_INSTALL}/usr/lib/level-zero-tests/build"
+
+      # Make unit-test binaries easy to discover from $PATH.
+      mkdir -p "${CRAFT_PART_INSTALL}/usr/bin"
+      find build -type f -name "*test*" -perm -111 -exec cp -a {} "${CRAFT_PART_INSTALL}/usr/bin/" \;

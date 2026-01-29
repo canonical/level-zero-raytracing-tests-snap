@@ -1,35 +1,36 @@
-# Vulkan CTS Snap
+# Level Zero Unit Tests Snap
 
-This snap provides an easy way to install and run the tests found in
-[Khronos's Vulkan Conformance Test Suite](https://github.com/KhronosGroup/VK-GL-CTS)
+This snap provides a way to build and run Intel's Level Zero unit tests
+from the Level Zero repository tag `v1.16.1`.
 
 ## Build
 
-```
+```bash
 snapcraft pack
 ```
 
-# Install
+## Install
 
-```
-snap install --classic --dangerous vulkan-cts_1.0_<your_arch>.snap
-```
-
-# Run
-
-## List available test caselists
-```
-vulkan-cts.list-tests
+```bash
+snap install --classic --dangerous level-zero-tests_1.16.1_<your_arch>.snap
 ```
 
-## Run tests
+## Run
 
-Run a specific test case:
-```
-vulkan-cts.test dEQP-VK.info.build
+### List available tests
+
+```bash
+level-zero-tests.list-tests
 ```
 
-Or run tests from a mustpass caselist:
+### Run a single test binary
+
+```bash
+level-zero-tests.test <binname> [args...]
 ```
-vulkan-cts.test --caselist=mustpass/main/vk-default/api.txt
+
+Example:
+
+```bash
+level-zero-tests.test test_sysman_events
 ```
