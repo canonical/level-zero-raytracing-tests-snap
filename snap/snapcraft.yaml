@@ -9,6 +9,7 @@ platforms:
     build-on: [amd64]
 version: '1.16.1'
 summary: Intel Level Zero Unit Tests
+license: MIT
 
 description: |
   Snap for building and running Intel's Level Zero unit tests
