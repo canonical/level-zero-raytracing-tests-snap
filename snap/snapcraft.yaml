@@ -85,6 +85,8 @@ parts:
       - cmake
       - libdrm2
       - libudev1
+      - libze-intel-gpu1
+      - libze1
       - libssl3t64
       - libpng16-16t64
       - libboost-log1.83.0
