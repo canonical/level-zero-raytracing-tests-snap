@@ -34,38 +34,19 @@ parts:
     stage:
       - list_tests
 
-  level-zero-sdk:
-    plugin: nil
-    source: https://github.com/oneapi-src/level-zero.git
-    source-type: git
-    source-branch: master
-    build-attributes:
-      - enable-patchelf
-    build-packages:
-      - build-essential
-      - cmake
-      - git
-      - pkg-config
-      - python3
-    override-build: |
-      set -eux
-
-      cmake -S . -B build \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX=/usr
-
-      cmake --build build -j"$(nproc)"
-      cmake --install build --prefix "${CRAFT_PART_INSTALL}/usr"
-
   level-zero-tests:
     plugin: nil
     source: https://github.com/oneapi-src/level-zero-tests.git
     source-type: git
-    source-branch: master
-    after:
-      - level-zero-sdk
+    source-branch: v$SNAPCRAFT_PROJECT_VERSION
     build-attributes:
       - enable-patchelf
+    override-pull: |
+      set -eux
+
+      craftctl default
+      git fetch --tags origin
+      git checkout "v$(craftctl get version)"
     build-packages:
       - build-essential
       - cmake
@@ -77,6 +58,7 @@ parts:
       - libboost-timer-dev
       - libdrm-dev
       - libudev-dev
+      - libze-dev
       - libssl-dev
       - libgtest-dev
       - libpng-dev
@@ -95,9 +77,6 @@ parts:
       - libstdc++6
     override-build: |
       set -eux
-
-      export CMAKE_PREFIX_PATH="${CRAFT_STAGE}/usr:${CMAKE_PREFIX_PATH:-}"
-      export LD_LIBRARY_PATH="${CRAFT_STAGE}/usr/lib:${CRAFT_STAGE}/usr/lib/${CRAFT_ARCH_TRIPLET_BUILD_FOR}:${LD_LIBRARY_PATH:-}"
 
       cmake -S . -B build \
         -DCMAKE_BUILD_TYPE=Release
