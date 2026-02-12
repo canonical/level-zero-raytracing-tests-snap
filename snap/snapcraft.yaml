@@ -18,8 +18,16 @@ description: |
 apps:
   test:
     command: test
+    plugs:
+      - opengl
+      - hardware-observe
+      - system-observe
   list-tests:
     command: list_tests
+    plugs:
+      - opengl
+      - hardware-observe
+      - system-observe
 
 parts:
   test-runner:
@@ -38,24 +46,24 @@ parts:
     plugin: nil
     source: https://github.com/oneapi-src/level-zero-tests.git
     source-type: git
-    source-branch: v$SNAPCRAFT_PROJECT_VERSION
+    source-commit: 87cf732fcfb31a943082fb3ca7c17b729eaf4758
     build-attributes:
       - enable-patchelf
-    override-pull: |
-      set -eux
-
-      craftctl default
-      git fetch --tags origin
-      git checkout "v$(craftctl get version)"
     build-packages:
       - build-essential
+      - binutils
       - cmake
       - git
       - pkg-config
-      - libboost-dev
-      - libboost-log-dev
-      - libboost-program-options-dev
-      - libboost-timer-dev
+      - ninja-build
+      - clang
+      - ocl-icd-opencl-dev
+      - libvulkan-dev
+      - libgl1-mesa-dev
+      - libglfw3-dev
+      - libgles2-mesa-dev
+      - glslang-tools
+      - libboost-all-dev
       - libdrm-dev
       - libudev-dev
       - libze-dev
@@ -67,21 +75,36 @@ parts:
       - cmake
       - libdrm2
       - libudev1
+      - libpci3
+      - pciutils
+      - libigc1
+      - libigdfcl1
+      - libnl-3-200
+      - libnl-route-3-200
       - libze-intel-gpu1
       - libze1
-      - libssl3t64
-      - libpng16-16t64
+      - libssl3
+      - libpng16-16
       - libboost-log1.83.0
       - libboost-program-options1.83.0
       - libboost-timer1.83.0
+      - libboost-filesystem1.83.0
+      - libboost-system1.83.0
       - libstdc++6
     override-build: |
       set -eux
 
-      cmake -S . -B build \
-        -DCMAKE_BUILD_TYPE=Release
+      mkdir -p build
+      cd build
+      cmake \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${CRAFT_PART_INSTALL}/usr" \
+        ..
+      cmake --build . -j"$(nproc)" --config Release --target install
+      cd ..
 
-      cmake --build build -j"$(nproc)"
+      mkdir -p "${CRAFT_PART_INSTALL}/level-zero-tests"
+      cp -a . "${CRAFT_PART_INSTALL}/level-zero-tests/src"
 
       # Stage the full build tree so ctest metadata and unit-test binaries
       # are available at runtime.
@@ -91,3 +114,9 @@ parts:
       # Make unit-test binaries easy to discover from $PATH.
       mkdir -p "${CRAFT_PART_INSTALL}/usr/bin"
       find build -type f -name "*test*" -perm -111 -exec cp -a {} "${CRAFT_PART_INSTALL}/usr/bin/" \;
+      # test_device helpers are looked up under "<cwd>/device".
+      mkdir -p "${CRAFT_PART_INSTALL}/usr/bin/device"
+      find build/conformance_tests/core/test_device -type f -name "test_*helper*" -perm -111 \
+        -exec cp -a {} "${CRAFT_PART_INSTALL}/usr/bin/device/" \;
+      # Some tests load SPIR-V modules from the current working directory.
+      find . -type f -name "*.spv" -exec cp -a {} "${CRAFT_PART_INSTALL}/usr/bin/" \;

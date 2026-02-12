@@ -27,4 +27,6 @@ if [ ! -x "${BIN_DIR}/${binname}" ]; then
     exit 2
 fi
 
-exec "${BIN_DIR}/${binname}" "$@"
+# Run from BIN_DIR so helper executables and local test assets resolve.
+cd "${BIN_DIR}"
+exec "./${binname}" "$@"

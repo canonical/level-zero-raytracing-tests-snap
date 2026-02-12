@@ -12,7 +12,7 @@ snapcraft pack
 ## Install
 
 ```bash
-snap install --classic --dangerous level-zero-tests_1.16.1_<your_arch>.snap
+snap install --dangerous level-zero-tests_1.16.1_<your_arch>.snap
 ```
 
 ## Run
