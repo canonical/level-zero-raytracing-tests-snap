@@ -3,4 +3,4 @@
 set -e
 
 # Strict confinement: nothing to clean up outside snap data.
-echo "level-zero-tests: remove hook completed."
+echo "level-zero-raytracing-tests: remove hook completed."

@@ -1,4 +1,4 @@
-name: level-zero-tests
+name: level-zero-raytracing-tests
 base: core24
 confinement: strict
 lint:
@@ -7,13 +7,14 @@ lint:
 platforms:
   amd64:
     build-on: [amd64]
-version: '1.16.1'
-summary: Intel Level Zero Unit Tests
+version: '2024-06-10'
+summary: Intel Level Zero Raytracing Tests
 license: MIT
 
 description: |
-  Snap for building and running Intel's Level Zero unit tests
-  from the Level Zero repository
+  Snap for building and running Intel's Level Zero Raytracing tests
+  from the level-zero-raytracing-support repository. Requires Intel
+  GPU hardware with ray tracing support (Xe HPG or later).
 
 apps:
   test:
@@ -29,6 +30,10 @@ apps:
       - hardware-observe
       - system-observe
 
+package-repositories:
+  - type: apt
+    ppa: kobuk-team/intel-graphics-staging
+
 parts:
   test-runner:
     source: bin/
@@ -42,81 +47,91 @@ parts:
     stage:
       - list_tests
 
-  level-zero-tests:
+  level-zero-raytracing-tests:
     plugin: nil
-    source: https://github.com/oneapi-src/level-zero-tests.git
+    source: https://github.com/intel/level-zero-raytracing-support.git
     source-type: git
-    source-commit: 87cf732fcfb31a943082fb3ca7c17b729eaf4758
     build-attributes:
       - enable-patchelf
     build-packages:
       - build-essential
       - binutils
       - cmake
-      - git
-      - pkg-config
       - ninja-build
       - clang
-      - ocl-icd-opencl-dev
+      - pkg-config
+      - git
+      - wget
+      - libze-dev
+      - libze-intel-gpu-dev
+      - libpng-dev
+      - libboost-all-dev
       - libvulkan-dev
-      - libgl1-mesa-dev
+      - libgl-dev
+      - mesa-common-dev
       - libglfw3-dev
       - libgles2-mesa-dev
       - glslang-tools
-      - libboost-all-dev
-      - libdrm-dev
-      - libudev-dev
-      - libze-dev
-      - libssl-dev
-      - libgtest-dev
-      - libpng-dev
-      - python3
+      - ocl-icd-opencl-dev
+      - ocl-icd-libopencl1
+      - libva-dev
+      - meson
+      - python3-pip
     stage-packages:
-      - cmake
-      - libdrm2
-      - libudev1
-      - libpci3
-      - pciutils
-      - libigc1
-      - libigdfcl1
-      - libnl-3-200
-      - libnl-route-3-200
-      - libze-intel-gpu1
       - libze1
-      - libssl3
+      - libze-intel-gpu1
+      - libze-intel-gpu-raytracing
       - libpng16-16
       - libboost-log1.83.0
       - libboost-program-options1.83.0
-      - libboost-timer1.83.0
       - libboost-filesystem1.83.0
       - libboost-system1.83.0
+      - libvulkan1
+      - libgl1
+      - libglfw3
+      - libdrm2
+      - ocl-icd-libopencl1
+      - libva2
+      - libva-drm2
       - libstdc++6
     override-build: |
       set -eux
 
+      # Download and set up the SYCL/clang toolkit (matches nightly used by install script)
+      SYCL_BUNDLE_ROOT="${CRAFT_PART_BUILD}/sycl_linux"
+      mkdir -p "${SYCL_BUNDLE_ROOT}"
+      cd "${SYCL_BUNDLE_ROOT}"
+      wget https://github.com/intel/llvm/releases/download/nightly-2024-06-10/sycl_linux.tar.gz
+      tar xf sycl_linux.tar.gz
+      rm sycl_linux.tar.gz
+
+      export PATH="${SYCL_BUNDLE_ROOT}/bin:${PATH}"
+      export CPATH="${SYCL_BUNDLE_ROOT}/include${CPATH:+:${CPATH}}"
+      export LIBRARY_PATH="${SYCL_BUNDLE_ROOT}/lib${LIBRARY_PATH:+:${LIBRARY_PATH}}"
+      export LD_LIBRARY_PATH="${SYCL_BUNDLE_ROOT}/lib:${SYCL_BUNDLE_ROOT}/linux/lib/x64:${SYCL_BUNDLE_ROOT}/lib/oclgpu${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+
+      # Python packages used by some test utilities
+      pip3 install opencv-python lxml --break-system-packages
+
+      # Build
+      cd "${CRAFT_PART_SRC}"
       mkdir -p build
       cd build
-      cmake \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="${CRAFT_PART_INSTALL}/usr" \
+      cmake -G Ninja \
+        -D CMAKE_CXX_COMPILER=clang++ \
+        -D CMAKE_C_COMPILER=clang \
+        -D CMAKE_BUILD_TYPE=Release \
+        -D ZE_RAYTRACING_SYCL_TESTS=INTERNAL_RTAS_BUILDER \
         ..
-      cmake --build . -j"$(nproc)" --config Release --target install
-      cd ..
+      cmake --build . --target package
 
-      mkdir -p "${CRAFT_PART_INSTALL}/level-zero-tests"
-      cp -a . "${CRAFT_PART_INSTALL}/level-zero-tests/src"
-
-      # Stage the full build tree so ctest metadata and unit-test binaries
-      # are available at runtime.
-      mkdir -p "${CRAFT_PART_INSTALL}/usr/lib/level-zero-tests"
-      cp -a build "${CRAFT_PART_INSTALL}/usr/lib/level-zero-tests/build"
-
-      # Make unit-test binaries easy to discover from $PATH.
+      # Copy test executables to the snap's bin dir
       mkdir -p "${CRAFT_PART_INSTALL}/usr/bin"
-      find build -type f -name "*test*" -perm -111 -exec cp -a {} "${CRAFT_PART_INSTALL}/usr/bin/" \;
-      # test_device helpers are looked up under "<cwd>/device".
-      mkdir -p "${CRAFT_PART_INSTALL}/usr/bin/device"
-      find build/conformance_tests/core/test_device -type f -name "test_*helper*" -perm -111 \
-        -exec cp -a {} "${CRAFT_PART_INSTALL}/usr/bin/device/" \;
-      # Some tests load SPIR-V modules from the current working directory.
-      find . -type f -name "*.spv" -exec cp -a {} "${CRAFT_PART_INSTALL}/usr/bin/" \;
+      find "${CRAFT_PART_SRC}/build" -type f -perm -111 \
+        -name "embree_*" \
+        -exec cp -a {} "${CRAFT_PART_INSTALL}/usr/bin/" \;
+
+      # Bundle SYCL runtime libs from the sycl bundle
+      mkdir -p "${CRAFT_PART_INSTALL}/usr/lib"
+      find "${SYCL_BUNDLE_ROOT}/lib" -maxdepth 1 -name "libsycl.so*" \
+        -exec cp -P {} "${CRAFT_PART_INSTALL}/usr/lib/" \;

@@ -4,6 +4,6 @@ set -euo pipefail
 
 BIN_DIR="${SNAP}/usr/bin"
 
-echo "Usage: level-zero-tests.test <test-name> [args...]"
+echo "Usage: level-zero-raytracing-tests.test <test-name> [args...]"
 echo ""
-find "${BIN_DIR}" -maxdepth 1 -type f -perm -111 -name "test_*" -printf "%f\n" | sort
+find "${BIN_DIR}" -maxdepth 1 -type f -perm -111 -printf "%f\n" | sort

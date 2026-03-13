@@ -6,4 +6,4 @@ set -e
 # and snap-local.
 snapctl set agent=enabled || true
 
-echo "level-zero-tests: install hook completed (strict confinement)."
+echo "level-zero-raytracing-tests: install hook completed (strict confinement)."

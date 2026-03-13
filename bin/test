@@ -5,25 +5,16 @@ set -euo pipefail
 BIN_DIR="${SNAP}/usr/bin"
 
 if [ "$#" -lt 1 ]; then
-    echo "Usage: level-zero-tests.test <binary-name> [args...]" >&2
+    echo "Usage: level-zero-raytracing-tests.test <binary-name> [args...]" >&2
     exit 2
 fi
 
 binname="$1"
 shift
 
-case "${binname}" in
-    test_*) ;;
-    *)
-        echo "Test not found: ${binname}" >&2
-        echo "Run: level-zero-tests.list-tests" >&2
-        exit 2
-        ;;
-esac
-
 if [ ! -x "${BIN_DIR}/${binname}" ]; then
     echo "Test not found: ${binname}" >&2
-    echo "Run: level-zero-tests.list-tests" >&2
+    echo "Run: level-zero-raytracing-tests.list-tests" >&2
     exit 2
 fi
 

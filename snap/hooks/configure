@@ -4,4 +4,4 @@ set -e
 
 # Strict confinement-friendly configure hook. We don't depend on Checkbox
 # for this snap.
-echo "level-zero-tests: configure hook completed."
+echo "level-zero-raytracing-tests: configure hook completed."
