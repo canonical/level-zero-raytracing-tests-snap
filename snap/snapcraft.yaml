@@ -80,6 +80,8 @@ parts:
       - libze1
       - libze-intel-gpu1
       - libze-intel-gpu-raytracing
+      - libigc2
+      - libigdfcl2
       - libtbb12
       - libpng16-16
       - libboost-log1.90.0
@@ -169,8 +171,15 @@ parts:
         -name "embree_*" \
         -exec cp -a {} "${CRAFT_PART_INSTALL}/usr/bin/" \;
 
-      # Bundle SYCL runtime libs and UR/PI adapter plugins from the sycl bundle
+      # Bundle SYCL runtime libs and UR/PI adapter plugins from the sycl bundle.
+      # libumf and libur_loader are dlopen'd by the UR adapters at runtime, so
+      # they must travel with the snap alongside libsycl and the adapter plugins.
       mkdir -p "${CRAFT_PART_INSTALL}/usr/lib"
       find "${SYCL_BUNDLE_ROOT}/lib" -maxdepth 1 \
-        \( -name "libsycl.so*" -o -name "libur_adapter_*.so*" -o -name "libpi_*.so*" \) \
+        \( -name "libsycl.so*" \
+           -o -name "libsycl-preview.so*" \
+           -o -name "libur_loader.so*" \
+           -o -name "libur_adapter_*.so*" \
+           -o -name "libumf.so*" \
+           -o -name "libpi_*.so*" \) \
         -exec cp -P {} "${CRAFT_PART_INSTALL}/usr/lib/" \;
