@@ -17,17 +17,17 @@ description: |
   GPU hardware with ray tracing support (Xe HPG or later).
 
 plugs:
-  gpu-2404:
+  gpu-2604:
     interface: content
-    target: $SNAP/gpu-2404
-    default-provider: mesa-2404
+    target: $SNAP/gpu-2604
+    default-provider: mesa-2604
 
 apps:
   test:
     command: test
     plugs:
       - opengl
-      - gpu-2404
+      - gpu-2604
   list-tests:
     command: list_tests
 
