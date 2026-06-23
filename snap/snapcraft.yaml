@@ -7,7 +7,7 @@ lint:
 platforms:
   amd64:
     build-on: [amd64]
-version: '2026-06-12'
+version: '1.2.3'
 summary: Intel Level Zero Raytracing Tests
 license: MIT
 
@@ -48,6 +48,7 @@ parts:
     plugin: nil
     source: https://github.com/intel/level-zero-raytracing-support.git
     source-type: git
+    source-tag: 'v1.2.3'
     build-attributes:
       - enable-patchelf
     build-packages:
@@ -56,12 +57,15 @@ parts:
       - binutils
       - cmake
       - ninja-build
-      - clang
+      - dpclang-6
+      - sycl-dpcpp-6-dev
+      - libclang-dpcpp-6-dev
+      - llvm-dpcpp-6
       - pkg-config
       - git
-      - wget
       - libze-dev
       - libze-intel-gpu-dev
+      - libumf-dev
       - libpng-dev
       - libboost-all-dev
       - libtbb-dev
@@ -75,7 +79,6 @@ parts:
       - ocl-icd-libopencl1
       - libva-dev
       - meson
-      - python3-pip
     stage-packages:
       - libze1
       - libze-intel-gpu1
@@ -95,73 +98,35 @@ parts:
       - libva2
       - libva-drm2
       - libstdc++6
+      - libsycl8
+      - dpclang-sycl-runtime-libs-6
+      - unified-runtime-adapters-dpcpp-6
+      - libumf0
     override-build: |
       set -eux
 
-      # Download and set up the SYCL/clang toolkit (matches nightly used by install script)
-      SYCL_BUNDLE_ROOT="${CRAFT_PART_BUILD}/sycl_linux"
-      mkdir -p "${SYCL_BUNDLE_ROOT}"
-      cd "${SYCL_BUNDLE_ROOT}"
-      wget https://github.com/intel/llvm/releases/download/nightly-2026-06-12/sycl_linux.tar.gz
-      tar xf sycl_linux.tar.gz
-      rm sycl_linux.tar.gz
+      # Build with Ubuntu's packaged Intel DPC++ compiler (dpclang-6, 6.2.0).
+      #
+      # dpclang doesn't pick up the system libc multiarch include dir on its
+      # own, so libstdc++-16's <cstdlib> can't find <stdlib.h>. Pass the libc
+      # and gcc/g++ include dirs explicitly via compiler flags (CPATH alone
+      # doesn't propagate to every SYCL sub-compilation).
+      GCC_VER=$(ls /usr/include/c++/ | sort -V | tail -1)
+      SYS_INCLUDES="-isystem /usr/include/c++/${GCC_VER} -isystem /usr/include/x86_64-linux-gnu/c++/${GCC_VER} -isystem /usr/include/x86_64-linux-gnu -isystem /usr/include"
 
-      export PATH="${SYCL_BUNDLE_ROOT}/bin:${PATH}"
-      export CPATH="${SYCL_BUNDLE_ROOT}/include${CPATH:+:${CPATH}}"
-      export LIBRARY_PATH="${SYCL_BUNDLE_ROOT}/lib${LIBRARY_PATH:+:${LIBRARY_PATH}}"
-      export LD_LIBRARY_PATH="${SYCL_BUNDLE_ROOT}/lib:${SYCL_BUNDLE_ROOT}/linux/lib/x64:${SYCL_BUNDLE_ROOT}/lib/oclgpu${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-
-      # Find the GCC lib dir that contains libstdc++.so (from libstdc++-16-dev)
-      GCC_LIB_DIR=$(find /usr/lib/gcc/x86_64-linux-gnu -name "libstdc++.so" -exec dirname {} \; | sort -V | tail -1)
-      export LIBRARY_PATH="${GCC_LIB_DIR}:${LIBRARY_PATH}"
-
-      # cmake's IntelLLVM toolchain injects -fgnuc-version=<system_gcc> into every
-      # compilation.  On Ubuntu 26.04 (glibc 2.41) this causes glibc to expect
-      # _Float32/_Float64 etc. as compiler built-ins and enables __malloc__ attribute
-      # syntax that the SYCL clang doesn't support.  Wrap the compilers (in-place,
-      # keeping the same bin/ directory so cmake's lib-path detection still works)
-      # so that flag is stripped before invoking the real binary.
-      for COMPILER in clang clang++; do
-        REAL="${SYCL_BUNDLE_ROOT}/bin/${COMPILER}"
-        mv "${REAL}" "${REAL}.real"
-        printf '#!/bin/bash\nargs=()\nfor arg in "$@"; do\n  [[ "$arg" == -fgnuc-version=* ]] || args+=("$arg")\ndone\nexec "%s" "${args[@]}"\n' \
-          "${REAL}.real" > "${REAL}"
-        chmod +x "${REAL}"
-      done
-
-      # Ubuntu 26.04 glibc added '|| defined __clang__' to the __TC__ (128-bit
-      # complex mode) typedef in bits/floatn.h, but the SYCL clang doesn't support
-      # __mode__(__TC__).  Shadow the header with a patched copy that substitutes a
-      # clang-compatible __float128-based typedef instead.
-      # Also shadow bits/wchar2.h: its variadic fortify inlines use
-      # __builtin_va_arg_pack which is GCC-only; disabling them is safe since the
-      # underlying wchar functions in libc still work.
-      INCLUDE_FIX="${CRAFT_PART_BUILD}/include-fix/x86_64-linux-gnu"
-      mkdir -p "${INCLUDE_FIX}/bits"
-      sed \
-        's/typedef _Complex float __cfloat128 __attribute__ ((__mode__ (__TC__)));/#ifdef __clang__\ntypedef _Complex __float128 __cfloat128;\n#else\ntypedef _Complex float __cfloat128 __attribute__ ((__mode__ (__TC__)));\n#endif/' \
-        /usr/include/x86_64-linux-gnu/bits/floatn.h \
-        > "${INCLUDE_FIX}/bits/floatn.h"
-      touch "${INCLUDE_FIX}/bits/wchar2.h"
-      export CPATH="${INCLUDE_FIX}:${CPATH}"
-
-      # Python packages used by some test utilities
-      pip3 install opencv-python lxml --break-system-packages
-
-      # Build
       cd "${CRAFT_PART_SRC}"
       rm -rf build
       mkdir -p build
       cd build
       cmake -G Ninja \
-        -D CMAKE_CXX_COMPILER=clang++ \
-        -D CMAKE_C_COMPILER=clang \
+        -D CMAKE_CXX_COMPILER=dpclang++ \
+        -D CMAKE_C_COMPILER=dpclang \
+        -D CMAKE_C_FLAGS="--gcc-toolchain=/usr ${SYS_INCLUDES}" \
+        -D CMAKE_CXX_FLAGS="--gcc-toolchain=/usr ${SYS_INCLUDES}" \
         -D CMAKE_BUILD_TYPE=Release \
         -D ZE_RAYTRACING_SYCL_TESTS=INTERNAL_RTAS_BUILDER \
         -D ZE_RAYTRACING_TBB=normal \
         -D CMAKE_POLICY_VERSION_MINIMUM=3.5 \
-        -D CMAKE_EXE_LINKER_FLAGS="-L${GCC_LIB_DIR} -lstdc++ -lm" \
-        -D CMAKE_SHARED_LINKER_FLAGS="-L${GCC_LIB_DIR} -lstdc++ -lm" \
         ..
       cmake --build .
 
@@ -170,16 +135,3 @@ parts:
       find "${CRAFT_PART_SRC}/build" -type f -perm -111 \
         -name "embree_*" \
         -exec cp -a {} "${CRAFT_PART_INSTALL}/usr/bin/" \;
-
-      # Bundle SYCL runtime libs and UR/PI adapter plugins from the sycl bundle.
-      # libumf and libur_loader are dlopen'd by the UR adapters at runtime, so
-      # they must travel with the snap alongside libsycl and the adapter plugins.
-      mkdir -p "${CRAFT_PART_INSTALL}/usr/lib"
-      find "${SYCL_BUNDLE_ROOT}/lib" -maxdepth 1 \
-        \( -name "libsycl.so*" \
-           -o -name "libsycl-preview.so*" \
-           -o -name "libur_loader.so*" \
-           -o -name "libur_adapter_*.so*" \
-           -o -name "libumf.so*" \
-           -o -name "libpi_*.so*" \) \
-        -exec cp -P {} "${CRAFT_PART_INSTALL}/usr/lib/" \;

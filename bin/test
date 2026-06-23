@@ -4,6 +4,11 @@ set -euo pipefail
 
 BIN_DIR="${SNAP}/usr/bin"
 
+# Expose the dpcpp runtime libs (libsycl device libs, UR adapters, libumf)
+# bundled at /usr/lib/dpcpp-6/llvm/lib so libsycl can dlopen them at runtime.
+DPCPP_LIB_DIR="${SNAP}/usr/lib/dpcpp-6/llvm/lib"
+export LD_LIBRARY_PATH="${DPCPP_LIB_DIR}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+
 if [ "$#" -lt 1 ]; then
     echo "Usage: level-zero-raytracing-tests.test <binary-name> [args...]" >&2
     exit 2
