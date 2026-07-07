@@ -135,3 +135,8 @@ parts:
       find "${CRAFT_PART_SRC}/build" -type f -perm -111 \
         -name "embree_*" \
         -exec cp -a {} "${CRAFT_PART_INSTALL}/usr/bin/" \;
+
+      # Stage reference images for the *_cornell_box compare tests. Only
+      # *_reference.tga (inputs), never cornell_box.tga (the test's output).
+      find "${CRAFT_PART_SRC}/testing" -maxdepth 1 -name '*_reference.tga' \
+        -exec cp -a {} "${CRAFT_PART_INSTALL}/usr/bin/" \;

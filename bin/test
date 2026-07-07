@@ -2,27 +2,92 @@
 
 set -euo pipefail
 
+# Derive SNAP when run directly (e.g. by Checkbox with sandboxing stripped).
+SNAP="${SNAP:-$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")}"
+
 BIN_DIR="${SNAP}/usr/bin"
 
-# Expose the dpcpp runtime libs (libsycl device libs, UR adapters, libumf)
-# bundled at /usr/lib/dpcpp-6/llvm/lib so libsycl can dlopen them at runtime.
+# dpcpp runtime libs (libsycl device libs, UR adapters, libumf).
 DPCPP_LIB_DIR="${SNAP}/usr/lib/dpcpp-6/llvm/lib"
-export LD_LIBRARY_PATH="${DPCPP_LIB_DIR}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
-if [ "$#" -lt 1 ]; then
-    echo "Usage: level-zero-raytracing-tests.test <binary-name> [args...]" >&2
-    exit 2
-fi
+# Extract --no-confinement; first positional is the test name, rest its args.
+NO_CONFINEMENT=false
+BINNAME=""
+TEST_ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --no-confinement)
+            NO_CONFINEMENT=true
+            ;;
+        *)
+            if [ -z "${BINNAME}" ]; then
+                BINNAME="$arg"
+            else
+                TEST_ARGS+=("$arg")
+            fi
+            ;;
+    esac
+done
 
-binname="$1"
-shift
-
-if [ ! -x "${BIN_DIR}/${binname}" ]; then
-    echo "Test not found: ${binname}" >&2
+if [ -z "${BINNAME}" ]; then
+    echo "Usage: level-zero-raytracing-tests.test [--no-confinement] <binary-name> [args...]" >&2
+    echo "" >&2
+    echo "  --no-confinement  Skip the snap-bundled Level Zero drivers and use" >&2
+    echo "                    the host Level Zero raytracing drivers exclusively." >&2
+    echo "                    Intended for use with the Checkbox framework when" >&2
+    echo "                    snap sandboxing is removed." >&2
+    echo "" >&2
     echo "Run: level-zero-raytracing-tests.list-tests" >&2
     exit 2
 fi
 
-# Run from BIN_DIR so helper executables and local test assets resolve.
-cd "${BIN_DIR}"
-exec "./${binname}" "$@"
+if [ ! -x "${BIN_DIR}/${BINNAME}" ]; then
+    echo "Test not found: ${BINNAME}" >&2
+    echo "Run: level-zero-raytracing-tests.list-tests" >&2
+    exit 2
+fi
+
+ARCH="${SNAP_ARCH:-$(dpkg --print-architecture)}"
+case "$ARCH" in
+    amd64) ARCH_TRIPLE=x86_64-linux-gnu ;;
+    arm64) ARCH_TRIPLE=aarch64-linux-gnu ;;
+    *)     ARCH_TRIPLE="${ARCH}-linux-gnu" ;;
+esac
+
+# Library env for the test binary only (applied via 'exec env' so host tools
+# like mkdir/ln keep their normal environment).
+LD_ENV=()
+if [ "${NO_CONFINEMENT}" = "true" ]; then
+    # Host Level Zero driver stack, but glibc/libstdc++ from the snap base
+    # (host's may be too old, e.g. missing GLIBC_2.43 for libsycl) and the
+    # SYCL runtime from the snap. Order base -> host -> snap wins because the
+    # binary uses DT_RUNPATH (searched after LD_LIBRARY_PATH).
+    HOST_ZE="/usr/lib/${ARCH_TRIPLE}/libze_loader.so.1"
+    if [ ! -f "${HOST_ZE}" ]; then
+        echo "Error: --no-confinement requires the host Level Zero loader at ${HOST_ZE}" >&2
+        echo "Install libze1 (or equivalent) on the host before using this mode." >&2
+        exit 1
+    fi
+    BASE_SNAP="$(awk '/^base:/ {print $2; exit}' "${SNAP}/meta/snap.yaml" 2>/dev/null)"
+    BASE_LIB="/snap/${BASE_SNAP}/current/lib/${ARCH_TRIPLE}"
+    if [ ! -d "${BASE_LIB}" ]; then
+        echo "Error: base runtime libraries not found at ${BASE_LIB}" >&2
+        echo "The '${BASE_SNAP:-base}' snap must be installed for --no-confinement." >&2
+        exit 1
+    fi
+    LD_ENV+=("LD_PRELOAD=${HOST_ZE}")
+    LD_ENV+=("LD_LIBRARY_PATH=${BASE_LIB}:/usr/lib/${ARCH_TRIPLE}:/usr/lib:${SNAP}/usr/lib/${ARCH_TRIPLE}:${DPCPP_LIB_DIR}")
+    echo "Host Level Zero loader: ${HOST_ZE}"
+    echo "Base runtime libraries: ${BASE_LIB}"
+else
+    LD_ENV+=("LD_LIBRARY_PATH=${DPCPP_LIB_DIR}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}")
+fi
+
+# Run from a writable dir; symlink the read-only binaries/assets in so tests
+# that write output (e.g. cornell_box) work while inputs still resolve.
+WORK_DIR="${SNAP_USER_COMMON:-${HOME:-/tmp}}/.level-zero-raytracing-tests"
+mkdir -p "${WORK_DIR}"
+ln -sfn "${BIN_DIR}"/* "${WORK_DIR}/"
+cd "${WORK_DIR}"
+
+exec env "${LD_ENV[@]}" "./${BINNAME}" ${TEST_ARGS[@]+"${TEST_ARGS[@]}"}

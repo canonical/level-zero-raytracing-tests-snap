@@ -31,7 +31,7 @@ level-zero-raytracing-tests.list-tests
 ### Run a single test binary
 
 ```bash
-level-zero-raytracing-tests.test <binname> [args...]
+level-zero-raytracing-tests.test [--no-confinement] <binname> [args...]
 ```
 
 Example:
@@ -39,3 +39,7 @@ Example:
 ```bash
 level-zero-raytracing-tests.test embree_raytracing_test
 ```
+
+Pass `--no-confinement` to skip the snap-bundled Level Zero drivers and use
+the host Level Zero raytracing drivers exclusively. This is intended for use
+with the Checkbox framework when snap sandboxing is removed.
