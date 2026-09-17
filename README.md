@@ -28,6 +28,20 @@ snap install --dangerous level-zero-raytracing-tests_2026-06-12_amd64.snap
 level-zero-raytracing-tests.list-tests
 ```
 
+### Check for a capable GPU
+
+```bash
+level-zero-raytracing-tests.check-gpu
+```
+
+Checks that an Intel GPU (PCI vendor `0x8086`) with a DRM render node is
+present, which is the hardware precondition for the tests. It prints the
+detected device(s) and exits `0` if an Intel GPU is found, non-zero otherwise,
+making it suitable as a Checkbox resource/precondition.
+
+This is a presence check only — confirming actual Level Zero raytracing
+support requires running a test binary (see below).
+
 ### Run a single test binary
 
 ```bash

@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Checks for the presence of an Intel GPU (PCI vendor 0x8086) with a DRM render
+# node, which is the hardware precondition for the Level Zero raytracing tests.
+#
+# Note: this is a presence check, not a raytracing-capability check. Confirming
+# actual Level Zero raytracing support requires running a test binary (see
+# level-zero-raytracing-tests.test). This check is intended as a cheap
+# precondition, e.g. for the Checkbox framework.
+#
+# Exit status:
+#   0  an Intel GPU with a render node was found
+#   1  no suitable Intel GPU was found
+
+set -uo pipefail
+
+INTEL_VENDOR="0x8086"
+
+found=0
+
+# Prefer render nodes (renderD*), then fall back to card* devices.
+for vendor_file in /sys/class/drm/renderD*/device/vendor \
+                   /sys/class/drm/card*/device/vendor; do
+    [ -r "${vendor_file}" ] || continue
+    vendor="$(cat "${vendor_file}" 2>/dev/null || true)"
+    if [ "${vendor}" = "${INTEL_VENDOR}" ]; then
+        drm_dir="$(dirname "$(dirname "${vendor_file}")")"
+        drm_node="$(basename "${drm_dir}")"
+        device_id="unknown"
+        if [ -r "${drm_dir}/device/device" ]; then
+            device_id="$(cat "${drm_dir}/device/device" 2>/dev/null || echo unknown)"
+        fi
+        echo "PASS: Intel GPU found: ${drm_node} (vendor ${vendor}, device ${device_id})"
+        found=1
+    fi
+done
+
+if [ "${found}" -eq 1 ]; then
+    echo "OK: an Intel GPU is present."
+    exit 0
+fi
+
+echo "FAIL: no Intel GPU (PCI vendor ${INTEL_VENDOR}) found." >&2
+echo "The Level Zero raytracing tests require an Intel GPU with ray tracing" >&2
+echo "support (Xe HPG or later)." >&2
+exit 1

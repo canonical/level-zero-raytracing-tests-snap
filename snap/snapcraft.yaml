@@ -28,6 +28,10 @@ apps:
     plugs:
       - opengl
       - gpu-2604
+  check-gpu:
+    command: check_gpu
+    plugs:
+      - opengl
   list-tests:
     command: list_tests
 
@@ -43,6 +47,12 @@ parts:
     plugin: dump
     stage:
       - list_tests
+
+  check-gpu-runner:
+    source: bin/
+    plugin: dump
+    stage:
+      - check_gpu
 
   level-zero-raytracing-tests:
     plugin: nil
